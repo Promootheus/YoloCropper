@@ -7,7 +7,7 @@ Because this is intended for Stable Diffusion SDXL it will create an additional 
 
 ACQUIRING THE MODELS
 
-For the main body detection you will need to donwnload the main models from here
+For the main body detection you will need to download the main models from here
 https://github.com/ultralytics/ultralytics
 
 Pick one or all of the following models
@@ -19,7 +19,21 @@ https://github.com/akanametov/yolov8-face
 or here
 https://huggingface.co/models?sort=trending&search=yolo+face
 
+INSTALL PYTORCH FROM HERE
+
+https://pytorch.org/get-started/locally/
+
+I used.... pip3 install torch torchvision torchaudio
+
+INSTALL YOLO FROM HERE
+
+https://docs.ultralytics.com/quickstart/
+
 USING THE CODE
+
+Either run main.py using python main.py
+
+or
 
 Create a new QT Creator Python project
 Overwrite the code in main.py with the code from this main.py
