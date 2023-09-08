@@ -104,224 +104,228 @@ def detect_and_crop(body_model, face_model, source_folder, info_textbox, aspect_
 
         crop_img = None  # Initialize crop_img as None
         for img_name in os.listdir(source_folder):
-            if 'edited' in img_name:
-                continue
+            try:
+                if 'edited' in img_name:
+                    continue
 
-            info_textbox.append(f"Processing Image: {img_name}")
-            QApplication.processEvents()
+                info_textbox.append(f"Processing Image: {img_name}")
+                QApplication.processEvents()
 
-            if Path(img_name).suffix.lower() in image_extensions:
+                if Path(img_name).suffix.lower() in image_extensions:
 
-                # Update the processed_images counter and the progress bar
-                processed_images += 1
-                progress = int((processed_images / total_images) * 100)
-                progress_bar.setValue(progress)
+                    # Update the processed_images counter and the progress bar
+                    processed_images += 1
+                    progress = int((processed_images / total_images) * 100)
+                    progress_bar.setValue(progress)
 
-                img_path = os.path.join(source_folder, img_name)
-                results_body = body_model.predict(img_path)
-                results_face = face_model.predict(img_path)
+                    img_path = os.path.join(source_folder, img_name)
+                    results_body = body_model.predict(img_path)
+                    results_face = face_model.predict(img_path)
 
-                boxes_body = results_body[0].boxes.xyxy
-                confidences_body = results_body[0].boxes.conf
-                labels_body = results_body[0].boxes.cls
+                    boxes_body = results_body[0].boxes.xyxy
+                    confidences_body = results_body[0].boxes.conf
+                    labels_body = results_body[0].boxes.cls
 
-                boxes_face = results_face[0].boxes.xyxy
-                confidences_face = results_face[0].boxes.conf
-                labels_face = results_face[0].boxes.cls
+                    boxes_face = results_face[0].boxes.xyxy
+                    confidences_face = results_face[0].boxes.conf
+                    labels_face = results_face[0].boxes.cls
 
-                img = cv2.imread(img_path)
-                face_detected = False
-                body_detected = False
+                    img = cv2.imread(img_path)
+                    face_detected = False
+                    body_detected = False
 
-                if aspect_ratios.get('body_cropped_any', (False,))[0]:
-                    print("Entered body_cropped_any block")
-                    for box, conf, label in zip(boxes_body, confidences_body, labels_body):
-                        if label == 0 and conf >= conf_threshold:
-                            x1, y1, x2, y2 = map(int, box)
-                            crop_img = img[y1:y2, x1:x2]
-                            h, w, _ = crop_img.shape
-                            if crop_img.size != 0:
-                                png_path = os.path.join(edited_folder, f"BodyCropped-AnyRatio/{img_name.split('.')[0]}_{w}x{h}.png")
-                                cv2.imwrite(png_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
-
-                                info_textbox.append("  Image saved successfully for body with any ratio.")
-                                QApplication.processEvents()
-                                info_textbox.append(f"  Final Resolution: {w}x{h}")
-                                QApplication.processEvents()
-
-                if aspect_ratios.get('subject_detection_results', (False,))[0]:
-                    print("Entered subject_detection_results block")
-                    img_with_boxes = img.copy()
-                    for box, conf, label in zip(boxes_body, confidences_body, labels_body):
-                        if label == 0 and conf >= conf_threshold:
-                            x1, y1, x2, y2 = map(int, box)
-                            cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    for box, conf, label in zip(boxes_face, confidences_face, labels_face):
-                        if label == 0 and conf >= conf_threshold:
-                            x1, y1, x2, y2 = map(int, box)
-                            cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                            png_compression_params = [cv2.IMWRITE_PNG_COMPRESSION, 4]
-                            cv2.imwrite(f"{edited_folder}/SubjectDetectionResults/{img_name.split('.')[0]}.png", img_with_boxes, png_compression_params)
-
-                # Find anchor point from face detection
-                anchor_point = None
-                for box, conf, label in zip(boxes_face, confidences_face, labels_face):
-                    if label == 0 and conf >= conf_threshold:
-                        x1, y1, x2, y2 = map(int, box)
-                        anchor_point = ((x1 + x2) // 2, y1)
-                        break  # Stop after finding the first face box
-
-                # Existing code for detecting and saving body images
-                for box, conf, label in zip(boxes_body, confidences_body, labels_body):
-                    if label == 0 and conf >= conf_threshold:
-                        body_detected = True
-                        info_textbox.append("  Body detected.")
-                        QApplication.processEvents()
-
-                        # Find anchor point from face detection for x coordinate
-                        x_anchor = None
-                        for box, conf, label in zip(boxes_face, confidences_face, labels_face):
-                            if label == 0 and conf >= conf_threshold:
-                                x1, y1, x2, y2 = map(int, box)
-                                x_anchor = (x1 + x2) // 2
-                                break  # Stop after finding the first face box
-
-                        # Get y coordinate from the top of the body bounding box
-                        y_anchor = None
+                    if aspect_ratios.get('body_cropped_any', (False,))[0]:
+                        print("Entered body_cropped_any block")
                         for box, conf, label in zip(boxes_body, confidences_body, labels_body):
                             if label == 0 and conf >= conf_threshold:
                                 x1, y1, x2, y2 = map(int, box)
-                                y_anchor = y1
-                                break  # Stop after finding the first body box
+                                crop_img = img[y1:y2, x1:x2]
+                                h, w, _ = crop_img.shape
+                                if crop_img.size != 0:
+                                    png_path = os.path.join(edited_folder, f"BodyCropped-AnyRatio/{img_name.split('.')[0]}_{w}x{h}.png")
+                                    cv2.imwrite(png_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
 
-                        anchor_point = None
-                        if x_anchor is not None and y_anchor is not None:
-                            if (head_priority_radio.isChecked() and aspect_ratios['body_1_1'][0]) or \
-                               (head_priority_radio2.isChecked() and aspect_ratios['body_1_1_5'][0]) or \
-                               (head_priority_radio3.isChecked() and aspect_ratios['face_1_1'][0]) or \
-                               (head_priority_radio4.isChecked() and aspect_ratios['face_1_1_5'][0]):
-                                # Use the x value from the face and the y value from the body for the anchor point
-                                anchor_point = (x_anchor, y_anchor)
-                            else:
-                                # Use the x and y value from the face for the anchor point
-                                anchor_point = ((x1 + x2) // 2, y1)
+                                    info_textbox.append("  Image saved successfully for body with any ratio.")
+                                    QApplication.processEvents()
+                                    info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                    QApplication.processEvents()
 
-                        if aspect_ratios['body_1_1'][0]:
-                            x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1', 3.0, img.shape,aspect_ratios, head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4,anchor_point=anchor_point)
-                            info_textbox.append(f"  Applying scale factor {final_scale} for body...")
+                    if aspect_ratios.get('subject_detection_results', (False,))[0]:
+                        print("Entered subject_detection_results block")
+                        img_with_boxes = img.copy()
+                        for box, conf, label in zip(boxes_body, confidences_body, labels_body):
+                            if label == 0 and conf >= conf_threshold:
+                                x1, y1, x2, y2 = map(int, box)
+                                cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        for box, conf, label in zip(boxes_face, confidences_face, labels_face):
+                            if label == 0 and conf >= conf_threshold:
+                                x1, y1, x2, y2 = map(int, box)
+                                cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                                png_compression_params = [cv2.IMWRITE_PNG_COMPRESSION, 4]
+                                cv2.imwrite(f"{edited_folder}/SubjectDetectionResults/{img_name.split('.')[0]}.png", img_with_boxes, png_compression_params)
+
+                    # Find anchor point from face detection
+                    anchor_point = None
+                    for box, conf, label in zip(boxes_face, confidences_face, labels_face):
+                        if label == 0 and conf >= conf_threshold:
+                            x1, y1, x2, y2 = map(int, box)
+                            anchor_point = ((x1 + x2) // 2, y1)
+                            break  # Stop after finding the first face box
+
+                    # Existing code for detecting and saving body images
+                    for box, conf, label in zip(boxes_body, confidences_body, labels_body):
+                        if label == 0 and conf >= conf_threshold:
+                            body_detected = True
+                            info_textbox.append("  Body detected.")
                             QApplication.processEvents()
-                            crop_img = img[y1:y2, x1:x2]
-                            h, w, _ = crop_img.shape
-                            if crop_img.size != 0:
 
-                                cv2.imwrite(f"{edited_folder}/Body-1to1/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                            # Find anchor point from face detection for x coordinate
+                            x_anchor = None
+                            for box, conf, label in zip(boxes_face, confidences_face, labels_face):
+                                if label == 0 and conf >= conf_threshold:
+                                    x1, y1, x2, y2 = map(int, box)
+                                    x_anchor = (x1 + x2) // 2
+                                    break  # Stop after finding the first face box
 
-                                # New code to resize and save as 1024x1024
-                                resized_img = cv2.resize(crop_img, (1024, 1024))
-                                cv2.imwrite(f"{edited_folder}/Body-1to1/{img_name.split('.')[0]}_1024x1024_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                            # Get y coordinate from the top of the body bounding box
+                            y_anchor = None
+                            for box, conf, label in zip(boxes_body, confidences_body, labels_body):
+                                if label == 0 and conf >= conf_threshold:
+                                    x1, y1, x2, y2 = map(int, box)
+                                    y_anchor = y1
+                                    break  # Stop after finding the first body box
 
-                                info_textbox.append("  Image saved successfully for body.")
+                            anchor_point = None
+                            if x_anchor is not None and y_anchor is not None:
+                                if (head_priority_radio.isChecked() and aspect_ratios['body_1_1'][0]) or \
+                                   (head_priority_radio2.isChecked() and aspect_ratios['body_1_1_5'][0]) or \
+                                   (head_priority_radio3.isChecked() and aspect_ratios['face_1_1'][0]) or \
+                                   (head_priority_radio4.isChecked() and aspect_ratios['face_1_1_5'][0]):
+                                    # Use the x value from the face and the y value from the body for the anchor point
+                                    anchor_point = (x_anchor, y_anchor)
+                                else:
+                                    # Use the x and y value from the face for the anchor point
+                                    anchor_point = ((x1 + x2) // 2, y1)
+
+                            if aspect_ratios['body_1_1'][0]:
+                                x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1', 3.0, img.shape,aspect_ratios, head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4,anchor_point=anchor_point)
+                                info_textbox.append(f"  Applying scale factor {final_scale} for body...")
                                 QApplication.processEvents()
-                                info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                crop_img = img[y1:y2, x1:x2]
+                                h, w, _ = crop_img.shape
+                                if crop_img.size != 0:
+
+                                    cv2.imwrite(f"{edited_folder}/Body-1to1/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+
+                                    # New code to resize and save as 1024x1024
+                                    resized_img = cv2.resize(crop_img, (1024, 1024))
+                                    cv2.imwrite(f"{edited_folder}/Body-1to1/{img_name.split('.')[0]}_1024x1024_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+
+                                    info_textbox.append("  Image saved successfully for body.")
+                                    QApplication.processEvents()
+                                    info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                    QApplication.processEvents()
+
+                            if aspect_ratios['body_1_1_5'][0]:
+
+                                x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1.5', 3.0, img.shape,aspect_ratios,head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4, anchor_point=anchor_point)
+                                info_textbox.append(f"  Applying scale factor {final_scale} for body (1:1.5)...")
                                 QApplication.processEvents()
+                                crop_img = img[y1:y2, x1:x2]
+                                h, w, _ = crop_img.shape
+                                if crop_img.size != 0:
+                                    cv2.imwrite(f"{edited_folder}/Body-1to1.5/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
 
-                        if aspect_ratios['body_1_1_5'][0]:
+                                    # New code to resize and save as 1024x1536
+                                    resized_img = cv2.resize(crop_img, (1024, 1536))
+                                    cv2.imwrite(f"{edited_folder}/Body-1to1.5/{img_name.split('.')[0]}_1024x1536_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
 
-                            x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1.5', 3.0, img.shape,aspect_ratios,head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4, anchor_point=anchor_point)
-                            info_textbox.append(f"  Applying scale factor {final_scale} for body (1:1.5)...")
-                            QApplication.processEvents()
-                            crop_img = img[y1:y2, x1:x2]
-                            h, w, _ = crop_img.shape
-                            if crop_img.size != 0:
-                                cv2.imwrite(f"{edited_folder}/Body-1to1.5/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                                    info_textbox.append("  Image saved successfully for body (1:1.5).")
+                                    QApplication.processEvents()
+                                    info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                    QApplication.processEvents()
 
-                                # New code to resize and save as 1024x1536
-                                resized_img = cv2.resize(crop_img, (1024, 1536))
-                                cv2.imwrite(f"{edited_folder}/Body-1to1.5/{img_name.split('.')[0]}_1024x1536_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
-
-                                info_textbox.append("  Image saved successfully for body (1:1.5).")
-                                QApplication.processEvents()
-                                info_textbox.append(f"  Final Resolution: {w}x{h}")
-                                QApplication.processEvents()
-
-                if not body_detected:
-                    info_textbox.append("  No body detected.")
-                    QApplication.processEvents()
-
-                for box, conf, label in zip(boxes_face, confidences_face, labels_face):
-                    if label == 0 and conf >= conf_threshold:
-                        face_detected = True
-                        info_textbox.append("  Face detected.")
+                    if not body_detected:
+                        info_textbox.append("  No body detected.")
                         QApplication.processEvents()
 
-                        if aspect_ratios['face_1_1'][0]:
-                            print ("aspect_ratio is face_1_1")
-                            print(f"Right before calling adjust_and_scale_box, anchor_point = {anchor_point}")
-                            x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1', 2.0, img.shape,aspect_ratios,head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4, anchor_point=anchor_point)
-                            info_textbox.append(f"  Applying scale factor {final_scale} for face...")
+                    for box, conf, label in zip(boxes_face, confidences_face, labels_face):
+                        if label == 0 and conf >= conf_threshold:
+                            face_detected = True
+                            info_textbox.append("  Face detected.")
                             QApplication.processEvents()
-                            crop_img = img[y1:y2, x1:x2]
-                            h, w, _ = crop_img.shape
-                            if crop_img.size != 0:
-                                cv2.imwrite(f"{edited_folder}/Face-1to1/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
 
-                                # New code to resize and save as 1024x1024
-                                resized_img = cv2.resize(crop_img, (1024, 1024))
-                                cv2.imwrite(f"{edited_folder}/Face-1to1/{img_name.split('.')[0]}_1024x1024_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
-
-                                info_textbox.append("  Image saved successfully for face.")
+                            if aspect_ratios['face_1_1'][0]:
+                                print ("aspect_ratio is face_1_1")
+                                print(f"Right before calling adjust_and_scale_box, anchor_point = {anchor_point}")
+                                x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1', 2.0, img.shape,aspect_ratios,head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4, anchor_point=anchor_point)
+                                info_textbox.append(f"  Applying scale factor {final_scale} for face...")
                                 QApplication.processEvents()
-                                info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                crop_img = img[y1:y2, x1:x2]
+                                h, w, _ = crop_img.shape
+                                if crop_img.size != 0:
+                                    cv2.imwrite(f"{edited_folder}/Face-1to1/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+
+                                    # New code to resize and save as 1024x1024
+                                    resized_img = cv2.resize(crop_img, (1024, 1024))
+                                    cv2.imwrite(f"{edited_folder}/Face-1to1/{img_name.split('.')[0]}_1024x1024_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+
+                                    info_textbox.append("  Image saved successfully for face.")
+                                    QApplication.processEvents()
+                                    info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                    QApplication.processEvents()
+
+                            if aspect_ratios['face_1_1_5'][0]:
+                                x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1.5', 2.0, img.shape,aspect_ratios,head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4, anchor_point=anchor_point)
+                                info_textbox.append(f"  Applying scale factor {final_scale} for face (1:1.5)...")
                                 QApplication.processEvents()
+                                crop_img = img[y1:y2, x1:x2]
+                                h, w, _ = crop_img.shape
+                                if crop_img.size != 0:
+                                    cv2.imwrite(f"{edited_folder}/Face-1to1.5/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
 
-                        if aspect_ratios['face_1_1_5'][0]:
-                            x1, y1, x2, y2, final_scale = adjust_and_scale_box(box, '1:1.5', 2.0, img.shape,aspect_ratios,head_priority_radio,head_priority_radio2, head_priority_radio3, head_priority_radio4, anchor_point=anchor_point)
-                            info_textbox.append(f"  Applying scale factor {final_scale} for face (1:1.5)...")
-                            QApplication.processEvents()
-                            crop_img = img[y1:y2, x1:x2]
-                            h, w, _ = crop_img.shape
-                            if crop_img.size != 0:
-                                cv2.imwrite(f"{edited_folder}/Face-1to1.5/{img_name.split('.')[0]}_{w}x{h}_scale_{final_scale:.2f}.png", crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                                    # New code to resize and save as 1024x1536
+                                    resized_img = cv2.resize(crop_img, (1024, 1536))
+                                    cv2.imwrite(f"{edited_folder}/Face-1to1.5/{img_name.split('.')[0]}_1024x1536_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
 
-                                # New code to resize and save as 1024x1536
-                                resized_img = cv2.resize(crop_img, (1024, 1536))
-                                cv2.imwrite(f"{edited_folder}/Face-1to1.5/{img_name.split('.')[0]}_1024x1536_scale_{final_scale:.2f}.png", resized_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                                    info_textbox.append("  Image saved successfully for face (1:1.5).")
+                                    QApplication.processEvents()
+                                    info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                    QApplication.processEvents()
 
-                                info_textbox.append("  Image saved successfully for face (1:1.5).")
-                                QApplication.processEvents()
-                                info_textbox.append(f"  Final Resolution: {w}x{h}")
-                                QApplication.processEvents()
+                    if not face_detected:
+                        info_textbox.append("  No face detected.")
+                        QApplication.processEvents()
 
-                if not face_detected:
-                    info_textbox.append("  No face detected.")
-                    QApplication.processEvents()
+                    info_textbox.append("------")
+                    QApplication.processEvents
 
-                info_textbox.append("------")
-                QApplication.processEvents
+                    # Convert the cropped OpenCV image to QPixmap and display it (only if crop_img is not None)
+                    if crop_img is not None:
+                        info_textbox.append(f"crop_img shape: {crop_img.shape}, type: {type(crop_img)}")  # Debug line
+                        QApplication.processEvents()  # Make sure to update the UI
+                        height, width, channel = crop_img.shape
+                        bytesPerLine = 3 * width
+                        crop_img = np.ascontiguousarray(crop_img)  # Make sure the array is contiguous in memory
+                        qImg = QImage(crop_img.data, width, height, bytesPerLine, QImage.Format_RGB888).rgbSwapped()
+                        pixmap = QPixmap.fromImage(qImg)
+                        scaled_pixmap = pixmap.scaledToHeight(640, Qt.FastTransformation)  # Scale to a height of 640
+                        cropped_image_label.setPixmap(scaled_pixmap)
+                    else:
+                        info_textbox.append("crop_img is None or empty.")  # Debug line
+                        QApplication.processEvents()  # Make sure to update the UI
 
-                # Convert the cropped OpenCV image to QPixmap and display it (only if crop_img is not None)
-                if crop_img is not None:
-                    info_textbox.append(f"crop_img shape: {crop_img.shape}, type: {type(crop_img)}")  # Debug line
-                    QApplication.processEvents()  # Make sure to update the UI
-                    height, width, channel = crop_img.shape
+                    # Convert the original OpenCV image to QPixmap and display it
+                    height, width, channel = img.shape
                     bytesPerLine = 3 * width
-                    crop_img = np.ascontiguousarray(crop_img)  # Make sure the array is contiguous in memory
-                    qImg = QImage(crop_img.data, width, height, bytesPerLine, QImage.Format_RGB888).rgbSwapped()
+                    qImg = QImage(img.data, width, height, bytesPerLine, QImage.Format_RGB888).rgbSwapped()
                     pixmap = QPixmap.fromImage(qImg)
                     scaled_pixmap = pixmap.scaledToHeight(640, Qt.FastTransformation)  # Scale to a height of 640
-                    cropped_image_label.setPixmap(scaled_pixmap)
-                else:
-                    info_textbox.append("crop_img is None or empty.")  # Debug line
-                    QApplication.processEvents()  # Make sure to update the UI
-
-                # Convert the original OpenCV image to QPixmap and display it
-                height, width, channel = img.shape
-                bytesPerLine = 3 * width
-                qImg = QImage(img.data, width, height, bytesPerLine, QImage.Format_RGB888).rgbSwapped()
-                pixmap = QPixmap.fromImage(qImg)
-                scaled_pixmap = pixmap.scaledToHeight(640, Qt.FastTransformation)  # Scale to a height of 640
-                original_image_label.setPixmap(scaled_pixmap)
-
+                    original_image_label.setPixmap(scaled_pixmap)
+            except Exception as e:
+                info_textbox.append(f"An error occurred for image {img_name}: {str(e)}")
+                QApplication.processEvents()
+                continue  # Skip to the next image
         info_textbox.append("All images have been processed.")
         QApplication.processEvents()
 
