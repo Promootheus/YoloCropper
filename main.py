@@ -83,6 +83,29 @@ def adjust_and_scale_box(box, aspect_ratio, scale_factor, img_shape, aspect_rati
     return x1, y1, x2, y2, scale_factor  # Return the coordinates and the final scale factor
 
 
+
+
+def adjust_to_desired_ratio(dimension, value, ratio):
+    """Calculate the corresponding value of the other dimension to achieve the desired ratio."""
+    if dimension == "width":
+        if ratio == "1:1":
+            return value
+        elif ratio == "1:1.5":
+            return int(value * (2/3))
+        else:  # ratio == "1.5:1"
+            return int(value * 1.5)
+    else:  # dimension == "height"
+        if ratio == "1:1":
+            return value
+        elif ratio == "1:1.5":
+            return int(value * 1.5)
+        else:  # ratio == "1.5:1"
+            return int(value * (2/3))
+
+
+
+
+
 def detect_and_crop(body_model, face_model, source_folder, info_textbox, aspect_ratios, progress_bar, original_image_label, cropped_image_label, head_priority_radio, head_priority_radio2,head_priority_radio3, head_priority_radio4,conf_threshold=0.30):
     print(f"head_priority_radio type = {type(head_priority_radio)}, value = {head_priority_radio.isChecked() if hasattr(head_priority_radio, 'isChecked') else head_priority_radio}")
     print(f"head_priority_radio2 type = {type(head_priority_radio2)}, value = {head_priority_radio2.isChecked() if hasattr(head_priority_radio2, 'isChecked') else head_priority_radio2}")
@@ -138,17 +161,128 @@ def detect_and_crop(body_model, face_model, source_folder, info_textbox, aspect_
                         print("Entered body_cropped_any block")
                         for box, conf, label in zip(boxes_body, confidences_body, labels_body):
                             if label == 0 and conf >= conf_threshold:
+                                print("Body Detected and within threshold")
                                 x1, y1, x2, y2 = map(int, box)
-                                crop_img = img[y1:y2, x1:x2]
-                                h, w, _ = crop_img.shape
-                                if crop_img.size != 0:
-                                    png_path = os.path.join(edited_folder, f"BodyCropped-AnyRatio/{img_name.split('.')[0]}_{w}x{h}.png")
-                                    cv2.imwrite(png_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                                box_width = x2 - x1
+                                box_height = y2 - y1
+                                box_aspect_ratio = box_width / box_height
+                                print(f"Box dimensions are {box_width} x {box_height}")
 
-                                    info_textbox.append("  Image saved successfully for body with any ratio.")
-                                    QApplication.processEvents()
-                                    info_textbox.append(f"  Final Resolution: {w}x{h}")
-                                    QApplication.processEvents()
+                                # Extract original image dimensions
+                                img_height, img_width, _ = img.shape
+                                print(f"Original image dimensions are {img_width} x {img_height}")
+
+                                # Determine which predefined aspect ratio the detected box is closest to
+                                ratios = [1, 1.5, 2/3]
+                                ratio_names = ["1:1", "1.5:1", "1:1.5"]
+                                differences = [abs(box_aspect_ratio - r) for r in ratios]
+                                print(f"Differences are {differences}")
+                                closest_ratio = ratio_names[differences.index(min(differences))]
+                                print(f"Closest ratio is {closest_ratio}")
+
+                                if closest_ratio == "1:1":
+                                    required_width = box_height
+                                    required_height = box_height
+                                elif closest_ratio == "1:1.5":
+                                    required_width = box_height * 2/3
+                                    required_height = box_height
+                                else:  # 1.5:1
+                                    required_width = box_height * 1.5
+                                    required_height = box_height
+
+                                # Calculate the required adjustment to achieve the closest aspect ratio
+                                width_difference = required_width - box_width
+                                height_difference = required_height - box_height
+
+                                # Adjust the dimensions based on the calculated difference
+                                if abs(width_difference) >= abs(height_difference):
+                                    adjustment = "width"
+                                    difference = width_difference
+                                else:
+                                    adjustment = "height"
+                                    difference = height_difference
+
+                                direction = "increase" if difference > 0 else "decrease"
+
+                                # Round the difference value
+                                difference_rounded = round(abs(difference))
+
+                                # Check if original image can handle the increase or decrease
+                                if direction == "increase":
+                                    if adjustment == "width":
+                                        new_width = box_width + difference_rounded
+                                        if new_width > img_width:
+                                            print(f"Width increased to max possible, height needs to be adjusted by {required_height - box_height} pixels to maintain {closest_ratio} aspect ratio.")
+                                        else:
+                                            print(f"Width can be increased by {difference_rounded} pixels to achieve {closest_ratio} aspect ratio.")
+                                    else:  # adjustment == "height"
+                                        new_height = box_height + difference_rounded
+                                        if new_height > img_height:
+                                            print(f"Height increased to max possible, width needs to be adjusted by {required_width - box_width} pixels to maintain {closest_ratio} aspect ratio.")
+                                        else:
+                                            print(f"Height can be increased by {difference_rounded} pixels to achieve {closest_ratio} aspect ratio.")
+                                else:  # decrease
+                                    if adjustment == "width":
+                                        print(f"Width needs to be decreased by {difference_rounded} pixels to achieve {closest_ratio} aspect ratio.")
+                                    else:  # adjustment == "height"
+                                        print(f"Height needs to be decreased by {difference_rounded} pixels to achieve {closest_ratio} aspect ratio.")
+
+
+
+
+
+                                if adjustment == "width" and direction == "increase":
+                                    new_width = box_width + difference_rounded
+                                    if new_width <= img_width:
+                                        # Adjust the x1 and x2 coordinates for the new width.
+                                        # Distributing the difference equally on both sides.
+                                        x1 -= difference_rounded // 2
+                                        x2 += difference_rounded // 2
+
+                                        # Check if the new x1 or x2 goes out of the image boundary.
+                                        if x1 < 0:
+                                            x2 -= x1  # Adjust x2 by the amount x1 is out of bound.
+                                            x1 = 0
+                                        if x2 > img_width:
+                                            x1 -= (x2 - img_width)  # Adjust x1 by the amount x2 is out of bound.
+                                            x2 = img_width
+
+                                # Crop the image using the determined dimensions.
+                                cropped_img = img[y1:y2, x1:x2]
+
+                                final_aspect_ratio = new_width / box_height
+
+                                # Resize the image based on the final aspect ratio
+                                if round(final_aspect_ratio, 2) == 1:  # 1:1
+                                    final_width, final_height = 1024, 1024
+                                    cropped_img = cv2.resize(cropped_img, (1024, 1024))
+                                elif round(final_aspect_ratio, 2) == 1.5:  # 1.5:1
+                                    final_width, final_height = 1536, 1024
+                                    cropped_img = cv2.resize(cropped_img, (1536, 1024))
+                                elif round(final_aspect_ratio, 2) == 0.67:  # 1:1.5
+                                    final_width, final_height = 1024, 1536
+                                    cropped_img = cv2.resize(cropped_img, (1024, 1536))
+
+                                # Assuming you've defined 'final_scale' and 'edited_folder' earlier in your code.
+                                save_path = f"{edited_folder}/BodyCropped-AnyRatio/{img_name.split('.')[0]}_{final_width}x{final_height}_ratio_{final_aspect_ratio:.2f}.png"
+                                cv2.imwrite(save_path, cropped_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+                                print(f"Image cropped and saved to: {save_path}")
+
+
+
+
+
+                                #x1, y1, x2, y2 = map(int, box)
+                                #crop_img = img[y1:y2, x1:x2]
+                                #h, w, _ = crop_img.shape
+                                #if crop_img.size != 0:
+                                #    png_path = os.path.join(edited_folder, f"BodyCropped-AnyRatio/{img_name.split('.')[0]}_{w}x{h}.png")
+                                #    cv2.imwrite(png_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 4])
+
+                                #    info_textbox.append("  Image saved successfully for body with any ratio.")
+                                #    QApplication.processEvents()
+                                #    info_textbox.append(f"  Final Resolution: {w}x{h}")
+                                #    QApplication.processEvents()
 
                     if aspect_ratios.get('subject_detection_results', (False,))[0]:
                         print("Entered subject_detection_results block")
